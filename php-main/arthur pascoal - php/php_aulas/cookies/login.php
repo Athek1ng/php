@@ -1,44 +1,60 @@
 <?php
-// obtém os valores digitados
-$email = $_POST["email"];
-$senha = $_POST["senha"];
+require_once "sessao.inc";
 
-include "conecta_mysql.inc";
-
-// Escapa os caracteres especiais, para evitar ataques de 5QL Injection
-
-$email = $conexao->real_escape_string($email);
-$senha = $conexao->real_escape_string($senha);
-
-$resultado = $conexao->query("SELECT * FROM usuarios WHERE email='$email'");
-
-$linhas = $resultado->num_rows;
-if($linhas==0){ // testa se a consulta retornou algum registro
-
-echo "<html><body>";
-echo "<p align=\"center\">E-mail n o encontrado!</p>";
-echo "<p align=\"center\"><a href=\"login.html\">Voltar</a></p>";
-echo "</body></html>";
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    header("Location: login.html");
+    exit;
 }
-else
-{
-    $dados = $resultado->fetch_array();
-$senha_banco = $dados ["senha"];
-if ($senha != $senha_banco) // confere senha
-{
-    echo "<html><body>";
-echo "<p align=\"center\">A senha está incorreta!</p>";
-echo "<p align=\"center\"><a href=\"login.html\">Voltar</a></p>";
-echo "</body></html>";
+
+$email = filter_var(trim($_POST["email"] ?? ""), FILTER_VALIDATE_EMAIL);
+$senha = $_POST["senha"] ?? "";
+$mensagem = "E-mail ou senha incorretos.";
+
+if ($email === false || $senha === "") {
+    http_response_code(400);
+    $mensagem = "Informe um e-mail e uma senha válidos.";
+} else {
+    require "conecta_my_sql.inc";
+
+    $consulta = $conexao->prepare("SELECT email, senha FROM usuarios WHERE email = ? LIMIT 1");
+    $consulta->bind_param("s", $email);
+    $consulta->execute();
+    $consulta->bind_result($email_banco, $senha_banco);
+    $encontrado = $consulta->fetch();
+    $consulta->close();
+
+    $senha_legada = $encontrado && hash_equals($senha_banco, $senha);
+    $autenticado = $senha_legada || ($encontrado && password_verify($senha, $senha_banco));
+
+    if ($autenticado) {
+        if ($senha_legada) {
+            $senha_hash = password_hash($senha, PASSWORD_DEFAULT);
+            $atualizacao = $conexao->prepare("UPDATE usuarios SET senha = ? WHERE email = ?");
+            $atualizacao->bind_param("ss", $senha_hash, $email_banco);
+            $atualizacao->execute();
+            $atualizacao->close();
+        }
+
+        session_regenerate_id(true);
+        $_SESSION["email_usuario"] = $email_banco;
+        $conexao->close();
+        header("Location: index.php");
+        exit;
+    }
+
+    $conexao->close();
+    http_response_code(401);
 }
-else
-//usuario e senha corretos. Vamos criar os cookies
-{
-setcookie("email_usuario", $email);
-setcookie("senha_usuario", $senha);
-// direciona para a pagina inicial dos usuarios cadastrados
-header ("Location: index.php");
-}
-}
-$conexao->close();
 ?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Falha no login</title>
+</head>
+<body>
+    <p><?= htmlspecialchars($mensagem, ENT_QUOTES, "UTF-8") ?></p>
+    <p><a href="login.html">Voltar ao login</a></p>
+</body>
+</html>

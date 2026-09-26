@@ -9,8 +9,7 @@ include "valida_cookies.inc";
     <title>Validação de Cookies</title>
 </head>
 <body>
-    Seja bem-vindo ao meu site!!
-    coloque o conteudo abaixo
-    <p> <a href="logout.php"></a></p>
+    <p>Bem-vindo, <?= htmlspecialchars($_SESSION["email_usuario"], ENT_QUOTES, "UTF-8") ?>!</p>
+    <p><a href="logout.php">Sair</a></p>
 </body>
 </html>
